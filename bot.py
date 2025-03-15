@@ -8,7 +8,8 @@ import yaml
 import asyncio
 import re
 
-from aiogram import Bot, Dispatcher, executor, types
+from aiogram import Bot, Dispatcher, types
+import asyncio
 from aiogram.utils.exceptions import Throttled
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from bs4 import BeautifulSoup as bs
