@@ -66,7 +66,7 @@ async def is_card_valid(card_number: str) -> bool: return (sum( map(lambda n: n[
 async def helpstr(message: types.Message):
     # await message.answer_chat_action('typing')
     keyboard_markup = types.InlineKeyboardMarkup(row_width=3)
-    btns = types.InlineKeyboardButton("Bot Source", url="https://github.com/xbinner18/Mrbannker")
+    btns = types.InlineKeyboardButton("Bot Source", url="https://www.instagram.com/finestofmykind?igsh=MXZpYTFzcWU1OTY4Nw==")
     keyboard_markup.row(btns)
     FIRST = message.from_user.first_name
     MSG = f'''
