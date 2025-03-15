@@ -272,3 +272,20 @@ async def ch(message: types.Message):
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, loop=loop)
+           from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
+
+# Run Flask in a separate thread
+threading.Thread(target=run_flask, daemon=True).start()
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
